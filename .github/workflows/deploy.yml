@@ -23,4 +23,4 @@ jobs:
       - name: Push to Pantheon
         run: |
           git remote add pantheon ssh://codeserver.dev.b797900c-e341-4d03-82cd-1c0a92605d0c@codeserver.dev.b797900c-e341-4d03-82cd-1c0a92605d0c.drush.in:2222/~/repository.git
-          git push pantheon master
+          git push pantheon master --force
