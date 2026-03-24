@@ -10,7 +10,7 @@
 
 <article id="post-<?php the_ID(); ?>" <?php post_class(); ?>>
 	<header class="entry-header">
-		<?php the_title( '<h1 class="entry-title">', '</h1>' ); ?> Demo page
+		<?php the_title( '<h1 class="entry-title">', '</h1>' ); ?> Demo page updated
 	</header><!-- .entry-header -->
 
 	<?php twentysixteen_post_thumbnail(); ?>
