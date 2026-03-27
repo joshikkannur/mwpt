@@ -4,6 +4,11 @@ on:
   pull_request:
     types: [opened, synchronize]
 
+# 🔥 REQUIRED: permissions for commenting on PRs
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   review:
     runs-on: ubuntu-latest
@@ -12,15 +17,23 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y jq gh
+
       - name: Get PR diff
         run: |
           gh pr diff ${{ github.event.pull_request.number }} > pr.diff
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # 🔥 Optional: prevent huge payloads breaking Claude
+      - name: Trim diff (max 50KB)
+        run: head -c 50000 pr.diff > pr_trimmed.diff
+
       - name: Send to Claude
         run: |
-          curl https://api.anthropic.com/v1/messages \
+          RESPONSE=$(curl https://api.anthropic.com/v1/messages \
+            -s \
             -H "x-api-key: $ANTHROPIC_API_KEY" \
             -H "anthropic-version: 2023-06-01" \
             -H "content-type: application/json" \
@@ -29,15 +42,21 @@ jobs:
               "max_tokens": 1000,
               "messages": [{
                 "role": "user",
-                "content": "Review this PR diff and give actionable feedback:\n\n'"$(cat pr.diff)"'"
+                "content": "You are a senior engineer. Review this PR diff for bugs, security issues, and improvements. Give clear actionable feedback.\n\n'"$(cat pr_trimmed.diff)"'"
               }]
-            }' > response.json
+            }')
+
+          echo "$RESPONSE" > response.json
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
-      - name: Post comment
+      - name: Extract Claude response
+        run: |
+          jq -r '.content[0].text' response.json > comment.txt
+
+      - name: Post comment to PR
         run: |
           gh pr comment ${{ github.event.pull_request.number }} \
-            --body "$(jq -r '.content[0].text' response.json)"
+            --body-file comment.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
