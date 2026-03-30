@@ -4,7 +4,6 @@ on:
   pull_request:
     types: [opened, synchronize]
 
-# 🔥 REQUIRED: permissions for commenting on PR
 permissions:
   contents: read
   pull-requests: write
@@ -26,33 +25,51 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # 🔥 Optional: prevent huge payloads breaking Claude
-      - name: Trim diff (max 50KB)
-        run: head -c 50000 pr.diff > pr_trimmed.diff
+      - name: Trim diff (max 30KB)
+        run: head -c 30000 pr.diff > pr_trimmed.diff
+
+      # 🔥 FIX: Proper JSON escaping using jq
+      - name: Prepare request payload
+        run: |
+          DIFF_CONTENT=$(jq -Rs . < pr_trimmed.diff)
+
+          jq -n \
+            --arg diff "$DIFF_CONTENT" \
+            '{
+              model: "claude-3-haiku-20240307",
+              max_tokens: 1000,
+              messages: [
+                {
+                  role: "user",
+                  content: ("You are a senior engineer. Review this PR diff for bugs, security issues, and improvements. Give clear actionable feedback.\n\n" + $diff)
+                }
+              ]
+            }' > payload.json
 
       - name: Send to Claude
         run: |
-          RESPONSE=$(curl https://api.anthropic.com/v1/messages \
-            -s \
+          curl -s https://api.anthropic.com/v1/messages \
             -H "x-api-key: $ANTHROPIC_API_KEY" \
             -H "anthropic-version: 2023-06-01" \
             -H "content-type: application/json" \
-            -d '{
-              "model": "claude-3-opus-20240229",
-              "max_tokens": 1000,
-              "messages": [{
-                "role": "user",
-                "content": "You are a senior engineer. Review this PR diff for bugs, security issues, and improvements. Give clear actionable feedback.\n\n'"$(cat pr_trimmed.diff)"'"
-              }]
-            }')
-
-          echo "$RESPONSE" > response.json
+            -d @payload.json > response.json
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
+      # 🔍 Debug (you can remove later)
+      - name: Debug Claude response
+        run: cat response.json
+
+      # ✅ FIX: Safe extraction
       - name: Extract Claude response
         run: |
-          jq -r '.content[0].text' response.json > comment.txt
+          COMMENT=$(jq -r '.content[0].text // empty' response.json)
+
+          if [ -z "$COMMENT" ]; then
+            COMMENT="⚠️ Claude did not return a valid response. Check logs."
+          fi
+
+          echo "$COMMENT" > comment.txt
 
       - name: Post comment to PR
         run: |
