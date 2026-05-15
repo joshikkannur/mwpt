@@ -33,7 +33,7 @@ jobs:
           jq -n \
             --rawfile diff pr_trimmed.diff \
             '{
-              "model": "claude-haiku-4-5",
+              "model": "claude-3-5-haiku-latest",
               "max_tokens": 1000,
               "messages": [
                 {
