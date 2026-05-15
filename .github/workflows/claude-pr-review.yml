@@ -26,26 +26,27 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Trim diff (max 30KB)
-        run: head -c 30000 pr.diff > pr_trimmed.diff
+        run: |
+          head -c 30000 pr.diff > pr_trimmed.diff
 
-      # 🔥 FIX: Proper JSON escaping using jq
       - name: Prepare request payload
         run: |
-          DIFF_CONTENT=$( cat pr_trimmed.diff)
+          DIFF_CONTENT=$(cat pr_trimmed.diff)
 
           jq -n \
             --arg diff "$DIFF_CONTENT" \
             '{
-              model: "claude-3-5-sonnet-20241022"
-              max_tokens: 1000,
-              messages: [
+              "model": "claude-3-5-sonnet-20241022",
+              "max_tokens": 1000,
+              "messages": [
                 {
-                  role: "user",
-                  content: ("You are a senior engineer. Review this PR diff for bugs, security issues, and improvements. Give clear actionable feedback.\n\n" + $diff)
+                  "role": "user",
+                  "content": ("You are a senior engineer. Review this PR diff for bugs, security issues, and improvements. Give clear actionable feedback.\n\n" + $diff)
                 }
               ]
             }' > payload.json
 
+          echo "=== PAYLOAD ==="
           cat payload.json
 
       - name: Send to Claude
@@ -55,23 +56,29 @@ jobs:
             -H "anthropic-version: 2023-06-01" \
             -H "content-type: application/json" \
             -d @payload.json > response.json
+
+          echo "=== RESPONSE ==="
+          cat response.json
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
-      # 🔍 Debug (you can remove later)
-      - name: Debug Claude response
-        run: cat response.json
-
-      # ✅ FIX: Safe extraction
       - name: Extract Claude response
         run: |
-          COMMENT=$(jq -r '.content[0].text // empty' response.json)
+          if jq -e '.error' response.json > /dev/null; then
+            echo "⚠️ Claude API returned an error." > comment.txt
+            jq '.error' response.json
+          else
+            COMMENT=$(jq -r '.content[0].text // empty' response.json)
 
-          if [ -z "$COMMENT" ]; then
-            COMMENT="⚠️ Claude did not return a valid response. Check logs."
+            if [ -z "$COMMENT" ]; then
+              COMMENT="⚠️ Claude returned an empty review."
+            fi
+
+            echo "$COMMENT" > comment.txt
           fi
 
-          echo "$COMMENT" > comment.txt
+          echo "=== COMMENT ==="
+          cat comment.txt
 
       - name: Post comment to PR
         run: |
