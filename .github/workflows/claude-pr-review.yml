@@ -11,7 +11,6 @@ permissions:
 jobs:
   review:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -31,12 +30,10 @@ jobs:
 
       - name: Prepare request payload
         run: |
-          DIFF_CONTENT=$(cat pr_trimmed.diff)
-
           jq -n \
-            --arg diff "$DIFF_CONTENT" \
+            --rawfile diff pr_trimmed.diff \
             '{
-              "model": "claude-3-5-haiku-latest",
+              "model": "claude-haiku-4-5",
               "max_tokens": 1000,
               "messages": [
                 {
@@ -45,7 +42,6 @@ jobs:
                 }
               ]
             }' > payload.json
-
           echo "=== PAYLOAD ==="
           cat payload.json
 
@@ -56,7 +52,6 @@ jobs:
             -H "anthropic-version: 2023-06-01" \
             -H "content-type: application/json" \
             -d @payload.json > response.json
-
           echo "=== RESPONSE ==="
           cat response.json
         env:
@@ -69,14 +64,11 @@ jobs:
             jq '.error' response.json
           else
             COMMENT=$(jq -r '.content[0].text // empty' response.json)
-
             if [ -z "$COMMENT" ]; then
               COMMENT="⚠️ Claude returned an empty review."
             fi
-
             echo "$COMMENT" > comment.txt
           fi
-
           echo "=== COMMENT ==="
           cat comment.txt
 
