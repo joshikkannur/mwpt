@@ -31,7 +31,7 @@ jobs:
       # 🔥 FIX: Proper JSON escaping using jq
       - name: Prepare request payload
         run: |
-          DIFF_CONTENT=$(jq -Rs . < pr_trimmed.diff)
+          DIFF_CONTENT=$( cat pr_trimmed.diff)
 
           jq -n \
             --arg diff "$DIFF_CONTENT" \
@@ -45,6 +45,8 @@ jobs:
                 }
               ]
             }' > payload.json
+
+          cat payload.json
 
       - name: Send to Claude
         run: |
